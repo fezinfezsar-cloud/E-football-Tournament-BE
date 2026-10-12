@@ -51,9 +51,8 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // Support Netlify preview and production subdomains if a netlify domain was configured
-    const hasNetlifyConfigured = allowedOrigins.some((o) => o.includes('.netlify.app'));
-    if (hasNetlifyConfigured && /^https:\/\/[a-zA-Z0-9---]+\.netlify\.app$/.test(normalizedOrigin)) {
+    // Support all Netlify production and preview subdomains for the tournament app
+    if (/^https:\/\/[a-zA-Z0-9_-]+\.netlify\.app$/i.test(normalizedOrigin)) {
       return callback(null, true);
     }
 

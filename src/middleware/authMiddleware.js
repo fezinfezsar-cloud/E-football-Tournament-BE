@@ -17,11 +17,14 @@ const protect = async (req, res, next) => {
       );
 
       // Check if token represents virtual admin
-      if (decoded.role === 'admin' && decoded.email === (process.env.ADMIN_EMAIL || 'admin@techfest.com')) {
+      const configuredAdminEmail = (process.env.ADMIN_EMAIL || 'admin@techfest.com').toLowerCase().trim();
+      const decodedEmail = (decoded.email || '').toLowerCase().trim();
+
+      if (decoded.role === 'admin' && (decodedEmail === configuredAdminEmail || decoded.id === 'admin_sys_id')) {
         req.user = {
           _id: 'admin_sys_id',
-          fullName: 'System Admin',
-          email: decoded.email,
+          fullName: 'Tournament Administrator',
+          email: configuredAdminEmail,
           role: 'admin'
         };
         return next();

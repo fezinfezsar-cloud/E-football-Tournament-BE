@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
 // Helper to generate JWT token
@@ -8,6 +9,38 @@ const generateToken = (payload) => {
     process.env.JWT_SECRET || 'efootball_super_secret_jwt_key_2026_techfest',
     { expiresIn: '7d' }
   );
+};
+
+/**
+ * Verifies entered password against configured admin password.
+ * Supports both plain-text strings and pre-hashed bcrypt strings ($2a$, $2b$, $2y$).
+ */
+const verifyAdminPassword = async (enteredPassword, configuredPassword) => {
+  if (!enteredPassword || !configuredPassword) return false;
+
+  const trimmedConfigured = configuredPassword.trim();
+  const isBcrypt = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(trimmedConfigured);
+
+  if (isBcrypt) {
+    try {
+      const match = await bcrypt.compare(enteredPassword, trimmedConfigured);
+      if (match) return true;
+    } catch (err) {
+      console.error('[Admin Auth] Bcrypt comparison error:', err.message);
+    }
+  }
+
+  // Check direct plain-text match
+  if (enteredPassword === configuredPassword) {
+    return true;
+  }
+
+  // Also check trimmed match to accommodate accidental whitespace during environment variable entry
+  if (enteredPassword.trim() === trimmedConfigured) {
+    return true;
+  }
+
+  return false;
 };
 
 // @desc    Register a new participant
@@ -124,19 +157,35 @@ const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const envAdminEmail = process.env.ADMIN_EMAIL || 'admin@techfest.com';
-    const envAdminPassword = process.env.ADMIN_PASSWORD || 'admin123456';
+    const isProduction = process.env.NODE_ENV === 'production';
+    const rawAdminEmail = process.env.ADMIN_EMAIL;
+    const rawAdminPassword = process.env.ADMIN_PASSWORD;
+
+    // In production, strictly enforce that administrator credentials are configured in environment
+    if (isProduction) {
+      if (!rawAdminPassword || !rawAdminEmail) {
+        console.error('[Admin Auth Error] Administrator credentials (ADMIN_EMAIL / ADMIN_PASSWORD) are not configured in Render environment variables.');
+        return res.status(500).json({
+          message: 'Administrator authentication is not configured on this server. Please set ADMIN_EMAIL and ADMIN_PASSWORD in Render Environment settings.'
+        });
+      }
+    }
+
+    const envAdminEmail = (rawAdminEmail || 'admin@techfest.com').trim();
+    const envAdminPassword = rawAdminPassword || 'admin123456';
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Please provide admin email and password.' });
     }
 
-    // Compare email case-insensitively and password strictly
-    const isEmailValid = email.toLowerCase().trim() === envAdminEmail.toLowerCase().trim();
-    const isPasswordValid = password === envAdminPassword;
+    // Compare email case-insensitively and trimmed
+    const isEmailValid = (email || '').toLowerCase().trim() === envAdminEmail.toLowerCase().trim();
+
+    // Verify password supporting both plain text and bcrypt hash
+    const isPasswordValid = await verifyAdminPassword(password, envAdminPassword);
 
     if (!isEmailValid || !isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid admin credentials.' });
+      return res.status(401).json({ message: 'Invalid administrator credentials.' });
     }
 
     // Issue dedicated Admin JWT
@@ -154,7 +203,7 @@ const adminLogin = async (req, res) => {
       token
     });
   } catch (error) {
-    console.error('Admin login error:', error);
+    console.error('Admin login error:', error.message);
     return res.status(500).json({ message: 'Server error during admin authentication.' });
   }
 };

@@ -50,6 +50,7 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date()
   });
 });
+app.use('/api/auth', require('../src/routes/authRoutes'));
 app.use('/api/registrations', require('../src/routes/registrationRoutes'));
 app.use('/api/admin', require('../src/routes/adminRoutes'));
 app.use('/api/tournament', require('../src/routes/tournamentRoutes'));
@@ -514,6 +515,89 @@ async function runAllTests() {
       if (origFallbackMongoUri) process.env.MONGO_URI = origFallbackMongoUri;
       else delete process.env.MONGO_URI;
     }
+    console.log('');
+
+    console.log('--- Test Group 12: Administrator Authentication & Authorization Security ---');
+    // 1. Successful admin login with valid plain text credentials
+    process.env.ADMIN_EMAIL = 'admin@techfest.com';
+    process.env.ADMIN_PASSWORD = 'superAdminPassword2026';
+
+    const adminLoginRes = await request(app)
+      .post('/api/auth/admin-login')
+      .send({ email: 'admin@techfest.com', password: 'superAdminPassword2026' });
+    assert(adminLoginRes.status === 200, 'Admin login with valid credentials returns HTTP 200');
+    assert(adminLoginRes.body.role === 'admin', 'Admin login returns admin role');
+    assert(typeof adminLoginRes.body.token === 'string', 'Admin login returns valid JWT string');
+
+    // 2. Admin routes accessible using issued token
+    const testAdminToken = adminLoginRes.body.token;
+    const testStatsRes = await request(app)
+      .get('/api/admin/stats')
+      .set('Authorization', `Bearer ${testAdminToken}`);
+    assert(testStatsRes.status === 200, 'Admin routes accessible using issued admin token');
+
+    // 3. Email normalization (case insensitivity and trim)
+    const normalizedRes = await request(app)
+      .post('/api/auth/admin-login')
+      .send({ email: '  ADMIN@techfest.com  ', password: 'superAdminPassword2026' });
+    assert(normalizedRes.status === 200, 'Admin login handles uppercase and untrimmed email');
+
+    // 4. Incorrect password rejected
+    const wrongPassRes = await request(app)
+      .post('/api/auth/admin-login')
+      .send({ email: 'admin@techfest.com', password: 'wrongPassword' });
+    assert(wrongPassRes.status === 401, 'Rejects incorrect password with HTTP 401');
+    assert(wrongPassRes.body.message === 'Invalid administrator credentials.', 'Returns exact error message on invalid password');
+
+    // 5. Unknown admin email rejected
+    const wrongEmailRes = await request(app)
+      .post('/api/auth/admin-login')
+      .send({ email: 'unknown@techfest.com', password: 'superAdminPassword2026' });
+    assert(wrongEmailRes.status === 401, 'Rejects unknown admin email with HTTP 401');
+
+    // 6. Missing email/password validation
+    const missingCredsRes = await request(app)
+      .post('/api/auth/admin-login')
+      .send({ email: 'admin@techfest.com' });
+    assert(missingCredsRes.status === 400, 'Rejects missing password with HTTP 400');
+
+    // 7. Bcrypt-hashed ADMIN_PASSWORD in environment
+    const bcrypt = require('bcryptjs');
+    const hashedSecret = await bcrypt.hash('HashedSecretPass789', 10);
+    process.env.ADMIN_PASSWORD = hashedSecret;
+
+    const bcryptLoginRes = await request(app)
+      .post('/api/auth/admin-login')
+      .send({ email: 'admin@techfest.com', password: 'HashedSecretPass789' });
+    assert(bcryptLoginRes.status === 200, 'Admin login succeeds when ADMIN_PASSWORD is a bcrypt hash');
+
+    const wrongBcryptRes = await request(app)
+      .post('/api/auth/admin-login')
+      .send({ email: 'admin@techfest.com', password: 'WrongPassword' });
+    assert(wrongBcryptRes.status === 401, 'Rejects wrong password when ADMIN_PASSWORD is a bcrypt hash');
+
+    // 8. Missing ADMIN_PASSWORD in production environment
+    const savedProdEnv = process.env.NODE_ENV;
+    const savedProdPass = process.env.ADMIN_PASSWORD;
+    try {
+      process.env.NODE_ENV = 'production';
+      delete process.env.ADMIN_PASSWORD;
+
+      const prodMissingRes = await request(app)
+        .post('/api/auth/admin-login')
+        .send({ email: 'admin@techfest.com', password: 'anyPassword' });
+      assert(prodMissingRes.status === 500, 'Fails with HTTP 500 when ADMIN_PASSWORD is missing in production');
+      assert(prodMissingRes.body.message.includes('not configured'), 'Returns clear configuration error in production');
+    } finally {
+      process.env.NODE_ENV = savedProdEnv;
+      process.env.ADMIN_PASSWORD = savedProdPass;
+    }
+
+    // 9. Participant cannot access admin routes
+    const participantAdminRes = await request(app)
+      .get('/api/admin/stats')
+      .set('Authorization', `Bearer ${otherToken}`);
+    assert(participantAdminRes.status === 403, 'Participant token blocked from admin routes with HTTP 403');
     console.log('');
   } catch (err) {
     console.error('Test runner execution error:', err);
