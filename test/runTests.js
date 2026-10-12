@@ -21,6 +21,9 @@ const {
 } = require('../src/utils/cloudinaryService');
 const cloudinaryService = require('../src/utils/cloudinaryService');
 
+const connectDB = require('../src/config/db');
+const { sanitizeMongoUri, isLocalhostUri } = require('../src/config/db');
+
 let mongoServer;
 
 async function setupDB() {
@@ -38,6 +41,15 @@ async function teardownDB() {
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.get('/api/health', (req, res) => {
+  const isDbConnected = mongoose.connection.readyState === 1;
+  res.status(isDbConnected ? 200 : 503).json({
+    status: isDbConnected ? 'OK' : 'DEGRADED',
+    database: isDbConnected ? 'CONNECTED' : 'DISCONNECTED',
+    system: 'E-Football Tournament Registration Backend',
+    timestamp: new Date()
+  });
+});
 app.use('/api/registrations', require('../src/routes/registrationRoutes'));
 app.use('/api/admin', require('../src/routes/adminRoutes'));
 app.use('/api/tournament', require('../src/routes/tournamentRoutes'));
@@ -427,6 +439,82 @@ async function runAllTests() {
     // Restore original method
     cloudinaryService.uploadScreenshotToCloudinary = originalUpload;
 
+    console.log('--- Test Group 11: MongoDB Connection Security & Error Handling ---');
+    // 1. Health check reports OK and CONNECTED
+    const healthRes = await request(app).get('/api/health');
+    assert(healthRes.status === 200, 'Health check returns HTTP 200');
+    assert(healthRes.body.database === 'CONNECTED', 'Health check reports database as CONNECTED');
+    assert(healthRes.body.status === 'OK', 'Health check reports status OK');
+
+    // 2. Credential masking
+    const rawAtlasUri = 'mongodb+srv://admin_user:SuperSecretPassword123@cluster0.abcde.mongodb.net/efootball_db?retryWrites=true&w=majority';
+    const maskedUri = sanitizeMongoUri(rawAtlasUri);
+    assert(!maskedUri.includes('SuperSecretPassword123'), 'Sanitized URI masks plain password');
+    assert(maskedUri.includes('admin_user:****@cluster0'), 'Sanitized URI retains username and cluster with masked password');
+
+    // 3. Loopback URI detection
+    assert(isLocalhostUri('mongodb://127.0.0.1:27017/efootball_db'), 'Detects 127.0.0.1 as loopback URI');
+    assert(isLocalhostUri('mongodb://localhost:27017/efootball_db'), 'Detects localhost as loopback URI');
+    assert(isLocalhostUri('mongodb://user:pass@127.0.0.1:27017/db'), 'Detects authenticated 127.0.0.1 as loopback URI');
+    assert(!isLocalhostUri(rawAtlasUri), 'Correctly identifies Atlas URI as non-localhost');
+
+    // 4. Production missing URI protection
+    const origEnv = process.env.NODE_ENV;
+    const origMongoUri = process.env.MONGODB_URI;
+    const origFallbackMongoUri = process.env.MONGO_URI;
+
+    try {
+      // Disconnect mongoose temporarily to test connectDB rejection logic
+      await mongoose.disconnect();
+
+      // Test missing URI in production
+      process.env.NODE_ENV = 'production';
+      delete process.env.MONGODB_URI;
+      delete process.env.MONGO_URI;
+
+      let missingUriErrorThrown = false;
+      try {
+        await connectDB();
+      } catch (err) {
+        missingUriErrorThrown = err.message.includes('Missing MongoDB connection string in production environment');
+      }
+      assert(missingUriErrorThrown, 'Fails with clear error when MONGODB_URI is missing in production');
+
+      // Test localhost URI in production
+      process.env.MONGODB_URI = 'mongodb://127.0.0.1:27017/efootball_db';
+      let localhostErrorThrown = false;
+      try {
+        await connectDB();
+      } catch (err) {
+        localhostErrorThrown = err.message.includes('Invalid MongoDB URI for production') && err.message.includes('Render');
+      }
+      assert(localhostErrorThrown, 'Rejects localhost/127.0.0.1 URI in production with clear Render explanation');
+
+      // Test localhost with MONGO_URI alias
+      delete process.env.MONGODB_URI;
+      process.env.MONGO_URI = 'mongodb://localhost:27017/efootball_db';
+      let aliasLocalhostErrorThrown = false;
+      try {
+        await connectDB();
+      } catch (err) {
+        aliasLocalhostErrorThrown = err.message.includes('Invalid MongoDB URI for production');
+      }
+      assert(aliasLocalhostErrorThrown, 'Checks fallback MONGO_URI and rejects localhost in production');
+
+      // Reconnect to in-memory server for remaining teardown
+      const memUri = mongoServer.getUri();
+      process.env.NODE_ENV = 'test';
+      process.env.MONGODB_URI = memUri;
+      await connectDB();
+      assert(mongoose.connection.readyState === 1, 'Reconnected to database successfully');
+    } finally {
+      process.env.NODE_ENV = origEnv;
+      if (origMongoUri) process.env.MONGODB_URI = origMongoUri;
+      else delete process.env.MONGODB_URI;
+      if (origFallbackMongoUri) process.env.MONGO_URI = origFallbackMongoUri;
+      else delete process.env.MONGO_URI;
+    }
+    console.log('');
   } catch (err) {
     console.error('Test runner execution error:', err);
     failed++;

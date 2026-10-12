@@ -1,15 +1,13 @@
+// Load environment variables immediately before loading other dependencies
+const dotenv = require('dotenv');
+dotenv.config();
+
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
-const dotenv = require('dotenv');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
-
-// Load environment configuration
-dotenv.config();
-
-// Connect to MongoDB
-connectDB();
 
 const app = express();
 
@@ -76,8 +74,10 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Health check endpoint (Render health monitoring)
 app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'OK',
+  const isDbConnected = mongoose.connection.readyState === 1;
+  res.status(isDbConnected ? 200 : 503).json({
+    status: isDbConnected ? 'OK' : 'DEGRADED',
+    database: isDbConnected ? 'CONNECTED' : 'DISCONNECTED',
     system: 'E-Football Tournament Registration Backend',
     timestamp: new Date()
   });
@@ -96,11 +96,32 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 
-app.listen(PORT, HOST, () => {
-  console.log(`===================================================`);
-  console.log(`⚡ E-Football Backend running on http://${HOST}:${PORT}`);
-  console.log(`⚡ Mode: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`⚡ Admin Email Configured: ${process.env.ADMIN_EMAIL || 'admin@techfest.com'}`);
-  console.log(`⚡ Allowed CORS Origins: ${allowedOrigins.join(', ')}`);
-  console.log(`===================================================`);
-});
+let serverInstance = null;
+
+const startServer = async () => {
+  try {
+    // Connect to MongoDB before accepting incoming requests
+    await connectDB();
+
+    serverInstance = app.listen(PORT, HOST, () => {
+      console.log(`===================================================`);
+      console.log(`⚡ E-Football Backend running on http://${HOST}:${PORT}`);
+      console.log(`⚡ Mode: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`⚡ Admin Email Configured: ${process.env.ADMIN_EMAIL || 'admin@techfest.com'}`);
+      console.log(`⚡ Allowed CORS Origins: ${allowedOrigins.join(', ')}`);
+      console.log(`===================================================`);
+    });
+
+    return serverInstance;
+  } catch (error) {
+    console.error(`[Server Fatal Error] Server startup aborted: ${error.message}`);
+    process.exit(1);
+  }
+};
+
+// Start the server only when run directly (not when required as a module in tests)
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, startServer };
