@@ -13,11 +13,60 @@ connectDB();
 
 const app = express();
 
-// Core Middlewares
-app.use(cors({
-  origin: '*', // Allow connections from frontend dev server
-  credentials: true
-}));
+// Configure allowed origins for CORS (Netlify production domain, custom origins, and local dev)
+const defaultDevOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000'
+];
+
+const configuredOrigins = [];
+if (process.env.FRONTEND_URL) {
+  process.env.FRONTEND_URL.split(',').forEach((url) => {
+    const trimmed = url.trim().replace(/\/+$/, '');
+    if (trimmed) configuredOrigins.push(trimmed);
+  });
+}
+if (process.env.ALLOWED_ORIGINS) {
+  process.env.ALLOWED_ORIGINS.split(',').forEach((url) => {
+    const trimmed = url.trim().replace(/\/+$/, '');
+    if (trimmed) configuredOrigins.push(trimmed);
+  });
+}
+
+const allowedOrigins = Array.from(new Set([...defaultDevOrigins, ...configuredOrigins]));
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser requests (e.g. mobile apps, curl, health-check, server-to-server, tests)
+    if (!origin) return callback(null, true);
+
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+
+    // Allow exact match from allowed origins
+    const isExplicitlyAllowed = allowedOrigins.some(
+      (allowed) => allowed === '*' || allowed.toLowerCase() === normalizedOrigin.toLowerCase()
+    );
+
+    if (isExplicitlyAllowed) {
+      return callback(null, true);
+    }
+
+    // Support Netlify preview and production subdomains if a netlify domain was configured
+    const hasNetlifyConfigured = allowedOrigins.some((o) => o.includes('.netlify.app'));
+    if (hasNetlifyConfigured && /^https:\/\/[a-zA-Z0-9---]+\.netlify\.app$/.test(normalizedOrigin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS blocked: Origin ${origin} is not authorized.`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+app.use(cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -25,7 +74,7 @@ app.use(express.urlencoded({ extended: true }));
 // Serve uploaded payment screenshots as static files
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Health check endpoint
+// Health check endpoint (Render health monitoring)
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
@@ -45,11 +94,13 @@ app.use(notFound);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
+const HOST = '0.0.0.0';
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log(`===================================================`);
-  console.log(`⚡ E-Football Backend running on port ${PORT}`);
+  console.log(`⚡ E-Football Backend running on http://${HOST}:${PORT}`);
   console.log(`⚡ Mode: ${process.env.NODE_ENV || 'development'}`);
   console.log(`⚡ Admin Email Configured: ${process.env.ADMIN_EMAIL || 'admin@techfest.com'}`);
+  console.log(`⚡ Allowed CORS Origins: ${allowedOrigins.join(', ')}`);
   console.log(`===================================================`);
 });

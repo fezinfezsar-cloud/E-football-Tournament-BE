@@ -4,12 +4,9 @@ jspm_packages/
 
 # Environment Variables
 .env
-.env.local
-.env.*.local
-.env.development
-.env.test
-.env.production
+.env.*
 !.env.example
+*.env
 
 # Logs
 logs/

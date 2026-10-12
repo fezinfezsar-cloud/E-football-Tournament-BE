@@ -18,7 +18,10 @@ const getRules = async (req, res) => {
       venue: tournamentConfig.venue,
       eventDate: tournamentConfig.eventDate,
       platform: tournamentConfig.platform,
-      maxParticipants: tournamentConfig.maxParticipants || 32
+      maxParticipants: tournamentConfig.maxParticipants || 32,
+      prizePool: tournamentConfig.prizePool,
+      prizeDescription: tournamentConfig.prizeDescription,
+      prizeBreakdown: tournamentConfig.prizeBreakdown
     });
   } catch (error) {
     return res.json({
@@ -31,7 +34,10 @@ const getRules = async (req, res) => {
       venue: tournamentConfig.venue,
       eventDate: tournamentConfig.eventDate,
       platform: tournamentConfig.platform,
-      maxParticipants: tournamentConfig.maxParticipants || 32
+      maxParticipants: tournamentConfig.maxParticipants || 32,
+      prizePool: tournamentConfig.prizePool,
+      prizeDescription: tournamentConfig.prizeDescription,
+      prizeBreakdown: tournamentConfig.prizeBreakdown
     });
   }
 };

@@ -1,5 +1,6 @@
 const TournamentRegistration = require('../models/TournamentRegistration');
 const TournamentSettings = require('../models/TournamentSettings');
+const tournamentConfig = require('../config/tournamentConfig');
 const cloudinaryService = require('../utils/cloudinaryService');
 
 // @desc    Get all registrations with search, filter, and sort
@@ -183,6 +184,13 @@ const getAdminStats = async (req, res) => {
       registrationStatus: { $ne: 'REJECTED' }
     });
 
+    const registrationFee = tournamentConfig.registrationFee || 50;
+    const maxCapacity = tournamentConfig.maxParticipants || 32;
+    const maxPossibleCollection = maxCapacity * registrationFee; // 1600
+    const actualConfirmedCollection = approvedCount * registrationFee;
+    const totalPrizeMoney = tournamentConfig.totalPrizeMoney || 1400;
+    const prizePoolCovered = actualConfirmedCollection >= totalPrizeMoney;
+
     return res.json({
       totalRegistrations,
       pendingCount,
@@ -191,7 +199,15 @@ const getAdminStats = async (req, res) => {
       draftCount,
       maxParticipants,
       activeCount,
-      isFull: activeCount >= maxParticipants
+      isFull: activeCount >= maxParticipants,
+      registrationFee,
+      maxPossibleCollection,
+      actualConfirmedCollection,
+      totalPrizeMoney,
+      prizePoolCovered,
+      prizePool: tournamentConfig.prizePool,
+      prizeBreakdown: tournamentConfig.prizeBreakdown,
+      eventExpensesBuffer: tournamentConfig.eventExpensesBuffer || 200
     });
   } catch (error) {
     console.error('Get admin stats error:', error);

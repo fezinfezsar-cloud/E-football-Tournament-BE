@@ -338,7 +338,7 @@ async function runAllTests() {
     const initialPaymentSettingsRes = await request(app).get('/api/tournament/payment-settings');
     assert(initialPaymentSettingsRes.status === 200, 'Public payment-settings endpoint returns HTTP 200 OK');
     assert(Boolean(initialPaymentSettingsRes.body.upiId), 'Public endpoint returns configured UPI ID');
-    assert(initialPaymentSettingsRes.body.registrationFee === 30, 'Returns correct entry fee (₹30)');
+    assert(initialPaymentSettingsRes.body.registrationFee === 50, 'Returns correct entry fee (₹50)');
 
     // 2. Participant role blocked from updating payment settings
     const participantAttempt = await request(app)
@@ -394,6 +394,34 @@ async function runAllTests() {
     // 10. Tournament Rules API returns updated value
     const updatedRulesRes = await request(app).get('/api/tournament/rules');
     assert(updatedRulesRes.body.upiId === newUpiHandle, 'Tournament rules API returns updated UPI ID');
+    console.log('');
+
+    // TEST 10: Entry Fee (₹50) & Prize Pool Consistency (₹1,400 Total, 1st: ₹1,000, 2nd: ₹400)
+    console.log('--- Test Group 10: Entry Fee & Prize Pool Structure ---');
+    const tournamentInfoRes = await request(app).get('/api/tournament/info');
+    assert(tournamentInfoRes.status === 200, 'Tournament info returns HTTP 200');
+    assert(tournamentInfoRes.body.registrationFee === 50, 'Registration fee is ₹50 in tournament info');
+    assert(tournamentInfoRes.body.prizePool === '₹1,400', 'Prize pool is ₹1,400 in tournament info');
+    assert(tournamentInfoRes.body.maxPossibleCollection === 1600, 'Max possible collection is ₹1,600 (32 × ₹50)');
+    assert(tournamentInfoRes.body.totalPrizeMoney === 1400, 'Total prize money is ₹1,400');
+    assert(tournamentInfoRes.body.eventExpensesBuffer === 200, 'Event expenses buffer is ₹200');
+    assert(Array.isArray(tournamentInfoRes.body.prizeBreakdown), 'Prize breakdown is an array');
+    assert(tournamentInfoRes.body.prizeBreakdown.length === 2, 'Exactly 2 prize places (1st and 2nd place only)');
+    assert(tournamentInfoRes.body.prizeBreakdown[0].rank.includes('1st Place'), '1st place rank defined');
+    assert(tournamentInfoRes.body.prizeBreakdown[0].prize.includes('1,000'), '1st place prize is ₹1,000');
+    assert(tournamentInfoRes.body.prizeBreakdown[1].rank.includes('2nd Place'), '2nd place rank defined');
+    assert(tournamentInfoRes.body.prizeBreakdown[1].prize.includes('400'), '2nd place prize is ₹400');
+
+    // Admin stats financial consistency
+    const adminStatsRes = await request(app)
+      .get('/api/admin/stats')
+      .set('Authorization', `Bearer ${adminToken}`);
+    assert(adminStatsRes.status === 200, 'Admin stats returns HTTP 200');
+    assert(adminStatsRes.body.registrationFee === 50, 'Admin stats has ₹50 registration fee');
+    assert(adminStatsRes.body.maxPossibleCollection === 1600, 'Admin stats has ₹1,600 max possible collection');
+    assert(adminStatsRes.body.actualConfirmedCollection === adminStatsRes.body.approvedCount * 50, 'Admin stats accurately calculates actual confirmed collection from approved count');
+    assert(adminStatsRes.body.totalPrizeMoney === 1400, 'Admin stats has ₹1,400 total prize commitment');
+    assert(adminStatsRes.body.eventExpensesBuffer === 200, 'Admin stats has ₹200 buffer');
     console.log('');
 
     // Restore original method

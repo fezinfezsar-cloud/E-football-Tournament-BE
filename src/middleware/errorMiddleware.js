@@ -16,6 +16,8 @@ const errorHandler = (err, req, res, next) => {
     statusCode = 400;
   } else if (err.name === 'MulterError') {
     statusCode = 400;
+  } else if (err.message && err.message.includes('CORS blocked')) {
+    statusCode = 403;
   }
 
   res.status(statusCode).json({

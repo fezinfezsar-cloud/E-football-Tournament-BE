@@ -1,17 +1,24 @@
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
+  const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/efootball_db';
+  const isProduction = process.env.NODE_ENV === 'production';
+
   try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/efootball_db';
-    
-    // Attempt standard connection
+    // Attempt connection with appropriate timeout for Atlas/remote cluster
     const conn = await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 3000 // 3 seconds timeout before fallback
+      serverSelectionTimeoutMS: isProduction ? 15000 : 5000
     });
 
-    console.log(`[MongoDB] Connected: ${conn.connection.host}:${conn.connection.port}/${conn.connection.name}`);
+    const hostDisplay = `${conn.connection.host}${conn.connection.port ? ':' + conn.connection.port : ''}`;
+    console.log(`[MongoDB] Connected: ${hostDisplay}/${conn.connection.name}`);
   } catch (error) {
-    console.warn(`[MongoDB] Primary connection failed (${error.message}). Attempting in-memory database fallback for seamless execution...`);
+    if (isProduction) {
+      console.error(`[MongoDB] Production connection to MongoDB Atlas failed:`, error.message);
+      throw error;
+    }
+
+    console.warn(`[MongoDB] Primary connection failed (${error.message}). Attempting in-memory database fallback for development...`);
     try {
       const { MongoMemoryServer } = require('mongodb-memory-server');
       const mongod = await MongoMemoryServer.create();

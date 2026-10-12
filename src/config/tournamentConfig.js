@@ -4,19 +4,22 @@ module.exports = {
   eventDate: "October 15, 2026",
   eventTime: "09:00 AM IST",
   venue: "South Block, VAST",
-  registrationFee: 30, // in INR
+  registrationFee: 50, // in INR
   currency: "₹",
   maxParticipants: 32,
   upiId: "techfest.efootball@upi",
   upiQrPlaceholder: "/assets/upi-qr-sample.png",
   contactPhone: "+91 9074268400",
   contactEmail: "tl24btec0127@vidyaacademy.ac.in",
-  prizePool: "₹750",
-  prizeDescription: "Total Cash Prize Pool of ₹750 with cash prizes for 1st and 2nd place winners.",
+  prizePool: "₹1,400",
+  prizeDescription: "Total Cash Prize Pool of ₹1,400 with cash prizes for 1st Place (₹1,000) and 2nd Place (₹400) winners.",
   prizeBreakdown: [
-    { rank: "1st Place (Champion)", prize: "₹500 Cash Prize" },
-    { rank: "2nd Place (Runner Up)", prize: "₹250 Cash Prize" }
+    { rank: "1st Place (Champion)", prize: "₹1,000 Cash Prize" },
+    { rank: "2nd Place (Runner Up)", prize: "₹400 Cash Prize" }
   ],
+  maxPossibleCollection: 1600,
+  totalPrizeMoney: 1400,
+  eventExpensesBuffer: 200,
   platform: "Mobile Only",
   gameVersion: "eFootball 2026 Mobile v3.4.0+",
   rules: {
@@ -62,7 +65,7 @@ module.exports = {
       "Decisions made by the Tournament Chief Marshal are final and binding."
     ],
     payment: [
-      "Registration fee is non-refundable (₹30 per participant) unless tournament is cancelled by organizers.",
+      "Registration fee is non-refundable (₹50 per participant) unless tournament is cancelled by organizers.",
       "Valid payment screenshot with clear UTR/Transaction reference number is mandatory.",
       "Uploads with fake or reused payment screenshots will result in account ban."
     ]
