@@ -99,6 +99,9 @@ async function runAllTests() {
     assert(signedUrl.includes('res.cloudinary.com'), 'URL contains Cloudinary domain');
     assert(signedUrl.includes('/authenticated/'), 'URL specifies authenticated delivery type');
     assert(signedUrl.includes(testPublicId), 'URL includes correct asset public ID');
+
+    const signedUrlWithFormat = generateSignedScreenshotUrl(testPublicId, 'authenticated', 3600, 'png');
+    assert(signedUrlWithFormat.includes('.png'), 'URL includes format extension (.png) when format is provided');
     console.log('');
 
     // CREATE TEST USERS AND JWT TOKENS
@@ -246,6 +249,25 @@ async function runAllTests() {
 
     assert(adminScreenshotRes.status === 200, 'Admin can request screenshot URL (HTTP 200)');
     assert(adminScreenshotRes.body.url.includes('authenticated'), 'Admin receives signed Cloudinary URL');
+    assert(adminScreenshotRes.body.url.includes('.png'), 'Admin signed URL includes format extension (.png)');
+
+    // Missing registration returns 404
+    const nonExistentId = new mongoose.Types.ObjectId();
+    const missingScreenshotRes = await request(app)
+      .get(`/api/admin/registrations/${nonExistentId}/screenshot`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    assert(missingScreenshotRes.status === 404, 'Returns HTTP 404 for non-existent registration screenshot');
+
+    // Unauthenticated request blocked from admin screenshot endpoint
+    const unauthenticatedRes = await request(app)
+      .get(`/api/admin/registrations/${regDoc._id}/screenshot`);
+    assert(unauthenticatedRes.status === 401, 'Unauthenticated request blocked from admin screenshot (HTTP 401)');
+
+    // Participant blocked from admin screenshot endpoint
+    const partBlockedAdminScreenshotRes = await request(app)
+      .get(`/api/admin/registrations/${regDoc._id}/screenshot`)
+      .set('Authorization', `Bearer ${participantToken}`);
+    assert(partBlockedAdminScreenshotRes.status === 403, 'Participant role blocked from admin screenshot endpoint (HTTP 403)');
 
     // Owner participant access to screenshot
     const ownerScreenshotRes = await request(app)
@@ -253,6 +275,7 @@ async function runAllTests() {
       .set('Authorization', `Bearer ${participantToken}`);
 
     assert(ownerScreenshotRes.status === 200, 'Owner participant can access their own screenshot (HTTP 200)');
+    assert(ownerScreenshotRes.body.url.includes('.png'), 'Owner signed URL includes format extension (.png)');
 
     // Other participant unauthorized access
     const unauthorizedRes = await request(app)

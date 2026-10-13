@@ -83,7 +83,7 @@ const deleteScreenshotFromCloudinary = async (publicId, deliveryType = 'authenti
  * Generates a short-lived signed delivery URL for viewing an authenticated Cloudinary asset.
  * Default expiration: 3600 seconds (1 hour).
  */
-const generateSignedScreenshotUrl = (publicId, deliveryType = 'authenticated', expiresInSeconds = 3600) => {
+const generateSignedScreenshotUrl = (publicId, deliveryType = 'authenticated', expiresInSeconds = 3600, format = '') => {
   if (!publicId) return null;
 
   // If publicId is a legacy local upload path or external URL, return as is
@@ -97,13 +97,21 @@ const generateSignedScreenshotUrl = (publicId, deliveryType = 'authenticated', e
 
   const expiresAt = Math.floor(Date.now() / 1000) + expiresInSeconds;
 
-  const url = cloudinary.url(publicId, {
+  const options = {
     type: deliveryType || 'authenticated',
     resource_type: 'image',
     sign_url: true,
     expires_at: expiresAt,
     secure: true
-  });
+  };
+
+  // If publicId does not contain an image extension and format is provided, specify format
+  const hasExt = /\.(jpe?g|png|webp|gif|svg)$/i.test(publicId);
+  if (!hasExt && format) {
+    options.format = format.toLowerCase().replace(/^\./, '');
+  }
+
+  const url = cloudinary.url(publicId, options);
 
   return url;
 };

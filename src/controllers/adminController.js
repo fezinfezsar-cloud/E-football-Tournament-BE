@@ -86,7 +86,8 @@ const getRegistrationScreenshot = async (req, res) => {
     }
 
     const deliveryType = registration.cloudinaryDeliveryType || 'authenticated';
-    const signedUrl = cloudinaryService.generateSignedScreenshotUrl(publicId, deliveryType, 3600);
+    const format = registration.cloudinaryMetadata?.format || '';
+    const signedUrl = cloudinaryService.generateSignedScreenshotUrl(publicId, deliveryType, 3600, format);
 
     return res.json({
       url: signedUrl,
